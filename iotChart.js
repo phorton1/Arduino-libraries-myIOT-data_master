@@ -9,6 +9,16 @@ var custom_inited = false;
 var err_values = {};
 	// for a moment, assuming all markers drawn from left to right
 
+// Default Series Colors from jqplot.js
+
+var defaultSeriesColors = [
+    "#4bb2c5", "#EAA228", "#c5b47f", "#579575",
+    "#839557", "#958c12", "#953579", "#4b5de4",
+    "#d8b83f", "#ff5800", "#0085cc", "#c747a3",
+    "#cddf54", "#FBD178", "#26B4E3", "#bd70c7"
+];
+
+
 
 // Resizing functions
 // window.addEventListener('resize', onChartResize);
@@ -113,6 +123,7 @@ function create_chart(chart_name, data, secs)
 
 	var header = header_by_name[chart_name];
 	var col = header.col;
+	var series_colors = header.series_colors || defaultSeriesColors;
 	var num_ticks = determineNumTicks(header);
 
 	var options = {
@@ -142,6 +153,13 @@ function create_chart(chart_name, data, secs)
 				// tickInterval: secsToInterval(secs),
 			},
 		},	// axes
+
+
+		// prh 2025-12-15 - added the ability to pass an array of series
+		// colors in the header object.
+
+		seriesColors: series_colors,
+
 	};	// options
 
 
