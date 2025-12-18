@@ -123,13 +123,11 @@ function getSeriesData(name)
 			data[j].push([dt*1000,val]);
 		}
 	}
-
 	console.log("getSeriesData() returning " + data.length + " records");
 	for (let j=0; j<header.num_cols; j++)
 	{
 		console.log("   col[" + j + "]  min=" + col[j].min + "  max=" + col[j].max);
 	}
-
 	return data;
 }
 
@@ -275,7 +273,7 @@ function create_chart(name)
 	if (refresh && refresh.value > 0)
 	 	charts[name].timer = setTimeout(
 			function () {
-				if (header.incremental_update)
+				if (data.length>0 && header.incremental_update)
 					get_updated_chart_data(name);
 				else
 					get_chart_data(name);
@@ -313,39 +311,40 @@ function dataToRecs(name, abuffer)
 {
     const view = new DataView(abuffer);
 	let bytes = view.byteLength;
-	console.log("dataToRecs() received " + bytes + " bytes");
-	
-	var header = charts[name].header;
-	var rec_size = 4*(header.num_cols+1);
-	let num_recs = bytes / rec_size;
-	if (bytes % rec_size)
-	{
-		console.log("WARNING: NON-INTEGRAL NUMBER OF CHART DATA RECORDS");
-		return;
-	}
-
 	var recs = [];
-	var offset = 0;
-	var col = header.col;
-	for (var i=0; i<num_recs; i++)
+	if (bytes > 0)
 	{
-		var rec = [];
-		rec.push(view.getUint32(offset, true));
-		offset += 4;
-		for (var j=0; j<header.num_cols; j++)
+		console.log("dataToRecs() received " + bytes + " bytes");
+		var header = charts[name].header;
+		var rec_size = 4*(header.num_cols+1);
+		let num_recs = bytes / rec_size;
+		if (bytes % rec_size)
 		{
-			rec.push(getTypedValue(view,offset,col[j].type));
-			offset += 4;
+			console.log("WARNING: NON-INTEGRAL NUMBER OF CHART DATA RECORDS");
+			return;
 		}
-		recs.push(rec);
+		var offset = 0;
+		var col = header.col;
+		for (var i=0; i<num_recs; i++)
+		{
+			var rec = [];
+			rec.push(view.getUint32(offset, true));
+			offset += 4;
+			for (var j=0; j<header.num_cols; j++)
+			{
+				rec.push(getTypedValue(view,offset,col[j].type));
+				offset += 4;
+			}
+			recs.push(rec);
+		}
 	}
-
+	else
+	{
+		console.log("WARNING: empty reply in dataToRecs()");
+	}
 	console.log("dataToRecs() returning " + recs.length  + " records");
 	return recs;
 }
-
-
-
 
 
 function create_chart_data(name, abuffer)
@@ -357,26 +356,27 @@ function create_chart_data(name, abuffer)
 }
 
 
-
-
 function update_chart_data(name, abuffer)
 {
 	let recs = dataToRecs(name, abuffer);
-	if (!recs) return;
-	let old_recs = charts[name].recs;
-	console.log("update_chart_data() num old_recs=" + old_recs.length);
-	for (let i=0; i<recs.length; i++)
+	if (recs)
 	{
-		old_recs.push(recs[i]);
+		let old_recs = charts[name].recs;
+		console.log("update_chart_data() num old_recs=" + old_recs.length);
+		for (let i=0; i<recs.length; i++)
+		{
+			old_recs.push(recs[i]);
+		}
+		console.log("update_chart_data() num new chart[name].recs = " + charts[name].recs.length);
+		create_chart(name);
 	}
-	console.log("update_chart_data() num new chart[name].recs = " + charts[name].recs.length);
-	create_chart(name);
 }
 
 
 function get_chart_data(name)
 {
 	console.log("get_chart_data(" + name + ")");
+	document.getElementById(name + "_update_button").disabled = true;
 	var ele = document.getElementById(name + "_chart_period");
 	var secs = ele ? ele.value : 0;
 	var xhr = new XMLHttpRequest();
@@ -392,42 +392,26 @@ function get_chart_data(name)
 }
 
 
-
 function get_updated_chart_data(name)
+	// an auto-update gets the records SINCE
+	// and the data MUST contain at least one record
 {
-	let old_recs = charts[name].recs;
-	if (old_recs.length > 2)
-	{
-		console.log("get_updated_chart_data() num old_recs=" + old_recs.length);
-		old_recs.pop();
-		old_recs.pop();
-		var dt = old_recs[old_recs.length-1][0];
-		console.log("get_updated_chart_data() after popping(2) dt=" + dt);
+	let recs = charts[name].recs;
+	var dt = recs[recs.length-1][0];
+	console.log("get_updated_chart_data() since=" + dt);
+	document.getElementById(name + "_update_button").disabled = true;
 
-		var xhr = new XMLHttpRequest();
-		xhr.open('GET','/custom/update_chart_data/' + name +
-			"?since=" + dt +
-			"&uuid=" + device_uuid, true);
-		xhr.responseType = 'arraybuffer';
-		xhr.onload = function(e)
-		{
-			update_chart_data(name, this.response);
-		};
-		xhr.send();
-	}
-	else
+	var xhr = new XMLHttpRequest();
+	xhr.open('GET','/custom/update_chart_data/' + name +
+		"?since=" + dt +
+		"&uuid=" + device_uuid, true);
+	xhr.responseType = 'arraybuffer';
+	xhr.onload = function(e)
 	{
-		var refresh = document.getElementById(name + '_refresh_interval');
-		if (refresh && refresh.value > 0)
-		{
-			charts[name].timer = setTimeout(
-				function () {
-					get_updated_chart_data(name);
-				},refresh.value * 1000);
-		}
-	}
+		update_chart_data(name, this.response);
+	};
+	xhr.send();
 }
-
 
 
 function get_chart_header(name)
@@ -448,7 +432,6 @@ function get_chart_header(name)
 		"?uuid=" + device_uuid,true);
 	xhr_init.send();
 }
-
 
 
 function doChart(name)
