@@ -16,6 +16,22 @@ function centigradeToFarenheit(centigrade)
 }
 
 
+function disableOne(id,disable)
+{
+	let ele = document.getElementById(id);
+	if (ele) ele.disabled = disable;
+}
+
+
+function disableControls(disable)
+{
+	disableOne("_update_button",disable);
+	disableOne("_chart_period",disable);
+	disableOne("_refresh_interval",disable);
+	disableOne("_degree_select",disable);
+}
+
+
 function setChartElementSize()
 {
 	let ele = document.getElementById("_chart");
@@ -31,7 +47,6 @@ function setChartElementSize()
 }
 
 
-
 function onChartResize()
 {
 	setChartElementSize();
@@ -39,6 +54,10 @@ function onChartResize()
 		create_chart();
 }
 
+
+//-------------------------------
+// plot creation
+//-------------------------------
 
 function determineNumTicks()
 {
@@ -128,7 +147,6 @@ function getSeriesData()
 	}
 	return data;
 }
-
 
 
 function create_chart()
@@ -286,9 +304,9 @@ function create_chart()
 
 	setRefreshTimer();
 
-	// enable the Update button
+	// enable the controls
 
-	document.getElementById("_update_button").disabled = false;
+	disableControls(false);
 
 	// clear the no_autozoom value and
 	// bind a handler to the jqPlotResetZoom method so that
@@ -335,24 +353,81 @@ function setRefreshTimer()
 }
 
 
-function refreshIntervalChanged()
+//--------------------------
+// UI event handlers
+//--------------------------
+// These methods can only be called after a plot
+// has been created at least once.
+
+function stopTimer()
 {
-    console.log('refreshIntervalChanged()');
-	chart.no_auto_zoom = true;
-	if (chart.plot)
-		create_chart();
+	if (chart.timer)
+	{
+		clearTimeout(chart.timer);
+		delete chart.timer;
+	}
 }
 
 
-function onDegreeSelect()
+function onPeriodChanged()
 {
-    console.log('onDegreeSelect()');
+    console.log('onPeriodChanged()');
+	stopTimer();
 	chart.no_auto_zoom = true;
-	if (chart.plot)
-		create_chart();
+	get_chart_data();
 }
 
 
+
+function onUpdate()
+{
+    console.log('onUpdate()');
+	stopTimer();
+
+	// if we've previously plotted this number of seconds
+	// and there was at least one value as given by max_dt
+	// then do an update instead of getting all the data
+	// when the user presses the update button.
+
+	let secs = getChartSecs();
+	if (chart.secs &&
+		chart.secs == secs &&
+		chart.max_dt)
+	{
+		get_updated_chart_data();
+	}
+	else
+	{
+		chart.no_auto_zoom = true;
+		get_chart_data();
+	}
+
+}
+
+
+function onRefreshChanged()
+{
+    console.log('onRefreshChanged()');
+	stopTimer();
+	disableControls(true);
+	chart.no_auto_zoom = true;
+	create_chart();
+}
+
+
+function onDegreesChanged()
+{
+    console.log('onDegreesChanged()');
+	stopTimer();
+	disableControls(true);
+	chart.no_auto_zoom = true;
+	create_chart();
+}
+
+
+//----------------------------------
+// data handling
+//----------------------------------
 
 function getTypedValue(view,offset,typ)
 {
@@ -367,7 +442,6 @@ function getTypedValue(view,offset,typ)
 		val = view.getUint32(offset, true);
 	return val;
 }
-
 
 
 function dataToRecs(abuffer)
@@ -440,12 +514,19 @@ function update_chart_data(abuffer)
 }
 
 
+function getChartSecs()
+{
+	var ele = document.getElementById("_chart_period");
+	return ele ? ele.value : 0;
+}
+
 function get_chart_data()
 {
 	console.log("get_chart_data()");
-	document.getElementById("_update_button").disabled = true;
-	var ele = document.getElementById("_chart_period");
-	var secs = ele ? ele.value : 0;
+	disableControls(true);
+	let secs = getChartSecs();
+	chart.secs = secs;
+	
 	var xhr = new XMLHttpRequest();
 	xhr.open('GET','/custom/chart_data' +
 		"?secs=" + secs +
@@ -464,7 +545,7 @@ function get_updated_chart_data()
 	let recs = chart.recs;
 	let max_dt = chart.max_dt;
 	console.log("get_updated_chart_data() since=" + max_dt);
-	document.getElementById("_update_button").disabled = true;
+	disableControls(true);	
 
 	var xhr = new XMLHttpRequest();
 	xhr.open('GET','/custom/update_chart_data' +
@@ -478,6 +559,10 @@ function get_updated_chart_data()
 	xhr.send();
 }
 
+
+//----------------------------------
+// initialization
+//----------------------------------
 
 function get_chart_header()
 {
@@ -500,30 +585,15 @@ function get_chart_header()
 
 
 function doChart()
+	// called only when initial chart html is loaded
 {
 	console.log('doChart() called');
-	stopChart();
 	$.jqplot.config.enablePlugins = true;
+	disableControls(true);
 	setChartElementSize();
-	if (!chart.header)
-	{
-		get_chart_header();
-	}
-	else
-	{
-		get_chart_data();
-	}
+	get_chart_header();
 }
 
 
-function stopChart()
-{
-	document.getElementById("_update_button").disabled = true;
-	if (chart.timer)
-	{
-		clearTimeout(chart.timer);
-		delete chart.timer;
-	}
-}
 
 
