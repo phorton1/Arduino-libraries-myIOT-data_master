@@ -149,7 +149,8 @@ function create_chart()
 				},
 				yaxes: []
 			};
-			for (let i = 0; i < chart.header.num_cols; i++) {
+			for (let i = 0; i < chart.header.num_cols; i++)
+			{
 				let axisName = i === 0 ? "yaxis" : "y" + (i+1) + "axis";
 				prevZoom.yaxes[i] = {
 					min: chart.plot.axes[axisName].min,
@@ -173,7 +174,8 @@ function create_chart()
 
 		title: header.name,
 		seriesDefaults: {
-			showMarker : false },
+			showMarker : false
+		},
 
 		legend : {
 			renderer: $.jqplot.EnhancedLegendRenderer,
@@ -198,7 +200,8 @@ function create_chart()
 			showTooltip:true,
 			followMouse: true,
 			showTooltipOutsideZoom: true,
-			constrainOutsideZoom: false},
+			constrainOutsideZoom: false
+		},
 
 	};	// options
 
@@ -218,7 +221,8 @@ function create_chart()
 			showLabel : false,	// the axes are the same as the legend
 			min: col[i].min,
 			max: col[i].max,
-			numberTicks: num_ticks,
+			tickInterval: col[i].tick_interval,
+			// numberTicks: num_ticks   // optional, only if you want uniform count
 		};
 		options.series[i] = {
 			showMarker: 0,
@@ -226,34 +230,8 @@ function create_chart()
 			label: col[i].name,
 			shadow : false,
 			lineWidth: 2,
+			yaxis: (i === 0 ? 'yaxis' : ('y' + (i+1) + 'axis'))
 		};
-	}
-
-	// scale the values to the 0th axis
-
-	if (header.num_cols > 1)
-	{
-		var global_min = col[0].min;
-		var global_max = col[0].max;
-		var global_range = global_max - global_min;
-
-		for (var i=1; i<header.num_cols; i++)
-		{
-			var min = col[i].min;
-			var max = col[i].max;
-			var range = max - min;
-			var series = data[i];
-			for (var j=0; j<series.length; j++)
-			{
-				var rec = series[j];
-				var val = rec[1];
-				val -= min;
-				val /= range;
-				val *= global_range;
-				val += global_min;
-				rec[1] = val;
-			}
-		}
 	}
 
 	// apply the previous zoom if we captured it
@@ -262,7 +240,8 @@ function create_chart()
 	{
 		options.axes.xaxis.min = prevZoom.xaxis.min;
 		options.axes.xaxis.max = prevZoom.xaxis.max;
-		for (let i = 0; i < header.num_cols; i++) {
+		for (let i = 0; i < header.num_cols; i++)
+		{
 			let axisName = i === 0 ? "yaxis" : "y" + (i+1) + "axis";
 			options.axes[axisName].min = prevZoom.yaxes[i].min;
 			options.axes[axisName].max = prevZoom.yaxes[i].max;
@@ -290,8 +269,10 @@ function create_chart()
 
 	$('td.jqplot-table-legend-swatch')
 		.off('click')
-		.each(function(i) {
-			$(this).on('click', { index: i }, function(ev) {
+		.each(function(i)
+		{
+			$(this).on('click', { index: i }, function(ev)
+			{
 				var index = ev.data.index;
 				plot.moveSeriesToFront(index);
 			});
@@ -317,12 +298,14 @@ function create_chart()
     chart.no_auto_zoom = false;
 	$('#_chart')
 		.off('jqplotResetZoom')
-		.on('jqplotResetZoom', function(ev, plot) {
+		.on('jqplotResetZoom', function(ev, plot)
+		{
 			chart.no_auto_zoom = true;
 			create_chart();
 		});
 
 }	// create_chart()
+
 
 
 function setRefreshTimer()
