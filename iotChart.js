@@ -1,6 +1,6 @@
 // iotChart.js
 
-var charts = {};
+var chart = {};
 var defaultSeriesColors = [
     "#4bb2c5", "#EAA228", "#c5b47f", "#579575",
     "#839557", "#958c12", "#953579", "#4b5de4",
@@ -9,89 +9,84 @@ var defaultSeriesColors = [
 ];
 
 
-
-function setChartElementSize(name)
+function centigradeToFarenheit(centigrade)
 {
-    let width = window.innerWidth;
-    let height = window.innerHeight;
-    let client_width = width - 30;
-	let client_height = height - navbar_height - 20;
-	let ele = document.getElementById(name + "_chart");
-	ele.style.height = (client_height - 60) + "px";	// minus controls
-	ele.style.width = client_width + "px";
+	var farenheit = (centigrade*9)/5 + 32;
+	return parseFloat(farenheit.toFixed(3));
+}
+
+
+function setChartElementSize()
+{
+	let ele = document.getElementById("_chart");
+    if (ele)
+	{
+		let width = window.innerWidth;
+		let height = window.innerHeight;
+		let client_width = width - 30;
+		let client_height = height;
+		ele.style.height = (client_height - 40) + "px";	// minus controls
+		ele.style.width = client_width + "px";
+	}
 }
 
 
 
 function onChartResize()
 {
-    let width = window.innerWidth;
-    let height = window.innerHeight;
-    let client_width = width - 30;
-	let client_height = height - navbar_height - 20;
-	for (let name in charts)
-	{
-		let ele = document.getElementById(name + "_chart");
-		ele.style.height = (client_height - 60) + "px";	// minus controls
-		ele.style.width = client_width + "px";
-		if (charts[name].plot)
-			charts[name].plot.replot( { resetAxes: true } );
-	}
+	setChartElementSize();
+	if (chart.plot)
+		chart.plot.replot( { resetAxes: true } );
 }
 
 
-function determineNumTicks(name)
-	// using the column tick_intervals and the raw min and max
-	// for each value, determine the number of ticks that will
-	// completely encapsulate the data, then go back and set
-	// the min and max of each column to the appropriate value.
+function determineNumTicks()
 {
-	var num_ticks = 0;
-	let header = charts[name].header;
-	for (let i=0; i<header.num_cols; i++)
-	{
-		let col = header.col[i];
-		let min = col.min;
-		let max = col.max;
-		let interval = col.tick_interval;
+    const header = chart.header;
+    let maxSpaces = 0;
 
-		let low = Math.floor(parseInt((min-interval+1) /interval));
-		let high = Math.ceil(parseInt((max+interval-1) /interval));
+    // First pass: snap mins to interval multiples and compute needed spaces
+    for (let i = 0; i < header.num_cols; i++)
+    {
+        const col = header.col[i];
+        const interval = col.tick_interval;
+        const lowStep  = Math.floor((col.min) / interval);
+        const highStep = Math.ceil((col.max) / interval);
+        const snappedMin = lowStep * interval;
+        const spaces     = highStep - lowStep;   // number of tick spaces
 
-		let new_min = low * interval;
-		let ticks = high - low;
-		if (ticks > num_ticks)
-			num_ticks = ticks;
+        col.min = snappedMin;
+        if (spaces > maxSpaces)
+        {
+            maxSpaces = spaces;
+        }
+    }
 
-		col.min = new_min;
-	}
+    // Second pass: assign max for all columns to use same number of spaces
+    for (let i = 0; i < header.num_cols; i++)
+    {
+        let col = header.col[i];
+        let interval = col.tick_interval;
+        col.max = col.min + (maxSpaces * interval);
+    }
 
-	// now assign the max so that every one uses the same number of ticks
-
-	for (var i=0; i<header.num_cols; i++)
-	{
-		let col = header.col[i];
-		let min = col.min;
-		let interval = col.tick_interval;
-
-		let max = min + num_ticks * interval;
-		col.max = max;
-	}
-
-	console.log("determineNumTicks() returning " + (num_ticks+1));
-	for (let j=0; j<header.num_cols; j++)
-	{
-		console.log("   col[" + j + "]  min=" + header.col[j].min + "  max=" + header.col[j].max);
-	}
-	
-	return num_ticks + 1;
+    // numberTicks is spaces + 1 (gridlines/labels count)
+    const numberTicks = maxSpaces + 1;
+    console.log("determineNumTicks() returning " + numberTicks);
+    for (let j = 0; j < header.num_cols; j++)
+    {
+        console.log("   col[" + j + "]  min=" + header.col[j].min + "  max=" + header.col[j].max);
+    }
+    return numberTicks;
 }
 
 
 
-function getSeriesData(name)
+function getSeriesData()
 {
-	let chart = charts[name];
+	let ele = document.getElementById('_degree_select');
+	let is_faren = ele ? parseInt(ele.value) : 0;
+
 	let header = chart.header;
 	let col = header.col;
 	let data = [];
@@ -109,6 +104,9 @@ function getSeriesData(name)
 		for (let j=0; j<header.num_cols; j++)
 		{
 			let val = rec[j+1];
+			if (is_faren && col[j].type == "temperature_t")
+				val = centigradeToFarenheit(val);
+
 			if (col[j].min == null)
 			{
 				col[j].min = val;
@@ -123,7 +121,7 @@ function getSeriesData(name)
 			data[j].push([dt*1000,val]);
 		}
 	}
-	console.log("getSeriesData() returning " + data.length + " records");
+	console.log("getSeriesData() returning " + recs.length + "*" + data.length + " records");
 	for (let j=0; j<header.num_cols; j++)
 	{
 		console.log("   col[" + j + "]  min=" + col[j].min + "  max=" + col[j].max);
@@ -133,22 +131,47 @@ function getSeriesData(name)
 
 
 
-function create_chart(name)
+function create_chart()
 {
-	if (charts[name].plot)
+	// Capture the zoom level if the plot exists
+	// UNLESS we are being called from the double-click
+	// jqplotResetZoom handler
+	
+	let prevZoom = null;
+	if (chart.plot)
 	{
-		charts[name].plot.destroy();
-		delete charts[name].plot;
+		if (!chart.no_auto_zoom)
+		{
+			prevZoom = {
+				xaxis: {
+					min: chart.plot.axes.xaxis.min,
+					max: chart.plot.axes.xaxis.max
+				},
+				yaxes: []
+			};
+			for (let i = 0; i < chart.header.num_cols; i++) {
+				let axisName = i === 0 ? "yaxis" : "y" + (i+1) + "axis";
+				prevZoom.yaxes[i] = {
+					min: chart.plot.axes[axisName].min,
+					max: chart.plot.axes[axisName].max
+				};
+			}
+		}
+		chart.plot.destroy();
+		delete chart.plot;
 	}
 
-	let data = getSeriesData(name);
-	let header = charts[name].header;
+	// build the series data, num_ticks, colors and
+	// create the options
+
+	let data = getSeriesData();
+	let header = chart.header;
 	let series_colors = header.series_colors || defaultSeriesColors;
-	let num_ticks = determineNumTicks(name);
+	let num_ticks = determineNumTicks();
 
 	let options = {
 
-		title: name,
+		title: header.name,
 		seriesDefaults: {
 			showMarker : false },
 
@@ -179,7 +202,7 @@ function create_chart(name)
 
 	};	// options
 
-
+	// fixup the axes according to my styling preferences
 
 	let col = header.col;
 	for (var i=0; i<header.num_cols; i++)
@@ -233,7 +256,22 @@ function create_chart(name)
 		}
 	}
 
-	var plot = $.jqplot(name + '_chart', data, options);
+	// apply the previous zoom if we captured it
+
+	if (prevZoom)
+	{
+		options.axes.xaxis.min = prevZoom.xaxis.min;
+		options.axes.xaxis.max = prevZoom.xaxis.max;
+		for (let i = 0; i < header.num_cols; i++) {
+			let axisName = i === 0 ? "yaxis" : "y" + (i+1) + "axis";
+			options.axes[axisName].min = prevZoom.yaxes[i].min;
+			options.axes[axisName].max = prevZoom.yaxes[i].max;
+		}
+	}
+
+	// DO THE PLOT
+
+	var plot = $.jqplot('_chart', data, options);
 
 	// reverse the order of the canvasas so that
 	// the most important one (zero=temperature1)
@@ -250,40 +288,86 @@ function create_chart(name)
 	// them on and off effectively lets the user set
 	// the z-order ..
 
-	// Note that this is NOT MULTI INSTANCE and
-	// WILL NOT WORK with multiple charts on one page!
-	
-	var i=0;
-	$('td.jqplot-table-legend-swatch').each(function(){
-		$(this).bind('click',{index:i},function(ev){
-			var index = ev.data.index;
-			// alert("toggle " + index);
-			plot.moveSeriesToFront(index);
+	$('td.jqplot-table-legend-swatch')
+		.off('click')
+		.each(function(i) {
+			$(this).on('click', { index: i }, function(ev) {
+				var index = ev.data.index;
+				plot.moveSeriesToFront(index);
+			});
 		});
-		i++;
-	});
 
 	// remember the plot
 
-	charts[name].plot = plot;
+	chart.plot = plot;
 
 	// set refresh timer if appropriate
 
-	var refresh = document.getElementById(name + '_refresh_interval');
-	if (refresh && refresh.value > 0)
-	 	charts[name].timer = setTimeout(
-			function () {
-				if (data.length>0 && header.incremental_update)
-					get_updated_chart_data(name);
-				else
-					get_chart_data(name);
-			},refresh.value * 1000);
+	setRefreshTimer();
 
 	// enable the Update button
 
-	document.getElementById(name + "_update_button").disabled = false;
+	document.getElementById("_update_button").disabled = false;
+
+	// clear the no_autozoom value and
+	// bind a handler to the jqPlotResetZoom method so that
+	// if the user double clicks on the chart, we redraw it
+	// without zooming.
+
+    chart.no_auto_zoom = false;
+	$('#_chart')
+		.off('jqplotResetZoom')
+		.on('jqplotResetZoom', function(ev, plot) {
+			chart.no_auto_zoom = true;
+			create_chart();
+		});
+
+}	// create_chart()
+
+
+function setRefreshTimer()
+{
+    let refresh = document.getElementById('_refresh_interval');
+	if (chart.timer)
+	{
+		console.log('clearing old timer');
+		clearTimeout(chart.timer);
+		delete chart.timer;
+	}
+	if (chart && chart.plot)
+	{
+	    let interval = refresh ? parseInt(refresh.value, 10) : 0;
+		if (interval > 0)
+		{
+			console.log("setting refresh(" + (chart.max_dt?"get_updated_chart_data":"get_chart_data") + ") timer");
+			chart.timer = chart.max_dt ?
+				setTimeout(get_updated_chart_data, interval * 1000) :
+				setTimeout(get_chart_data, interval * 1000);
+		}
+	}
+	else
+	{
+		refresh.value = 0;
+	}
 }
 
+
+function refreshIntervalChanged()
+{
+    console.log('refreshIntervalChanged()');
+	chart.no_auto_zoom = true;
+	if (chart.plot)
+		create_chart();
+}
+
+
+function onDegreeSelect()
+{
+    console.log('onDegreeSelect()');
+	chart.no_auto_zoom = true;
+	if (chart.plot)
+		create_chart();
+}
 
 
 
@@ -293,11 +377,7 @@ function getTypedValue(view,offset,typ)
 	if (typ == 'float')
 		val = view.getFloat32(offset, true);
 	else if (typ == 'temperature_t')
-	{
 		val = view.getFloat32(offset, true);
-		if (DEGREE_TYPE)
-			val = centigradeToFarenheit(val);
-	}
 	else if (typ == 'int32_t')
 		val = view.getInt32(offset, true);
 	else
@@ -307,15 +387,17 @@ function getTypedValue(view,offset,typ)
 
 
 
-function dataToRecs(name, abuffer)
+function dataToRecs(abuffer)
 {
     const view = new DataView(abuffer);
 	let bytes = view.byteLength;
 	var recs = [];
+    let max_dt = chart.max_dt || 0;
+
 	if (bytes > 0)
 	{
 		console.log("dataToRecs() received " + bytes + " bytes");
-		var header = charts[name].header;
+		var header = chart.header;
 		var rec_size = 4*(header.num_cols+1);
 		let num_recs = bytes / rec_size;
 		if (bytes % rec_size)
@@ -336,131 +418,128 @@ function dataToRecs(name, abuffer)
 				offset += 4;
 			}
 			recs.push(rec);
+			if (rec[0] > max_dt) max_dt = rec[0];
 		}
 	}
 	else
 	{
 		console.log("WARNING: empty reply in dataToRecs()");
 	}
-	console.log("dataToRecs() returning " + recs.length  + " records");
+	console.log("dataToRecs() returning " + recs.length  + " records; max_dt=" + max_dt);
+	chart.max_dt = max_dt;
 	return recs;
 }
 
 
-function create_chart_data(name, abuffer)
+function create_chart_data(abuffer)
 {
-	let recs = dataToRecs(name, abuffer);
+	let recs = dataToRecs(abuffer);
 	if (!recs) return;
-	charts[name].recs = recs;
-	create_chart(name);
+	chart.recs = recs;
+	create_chart();
 }
 
 
-function update_chart_data(name, abuffer)
+function update_chart_data(abuffer)
 {
-	let recs = dataToRecs(name, abuffer);
+	let recs = dataToRecs(abuffer);
 	if (recs)
 	{
-		let old_recs = charts[name].recs;
+		let old_recs = chart.recs;
 		console.log("update_chart_data() num old_recs=" + old_recs.length);
 		for (let i=0; i<recs.length; i++)
 		{
 			old_recs.push(recs[i]);
 		}
-		console.log("update_chart_data() num new chart[name].recs = " + charts[name].recs.length);
-		create_chart(name);
+		console.log("update_chart_data() num new recs= " + chart.recs.length);
+		create_chart();
 	}
 }
 
 
-function get_chart_data(name)
+function get_chart_data()
 {
-	console.log("get_chart_data(" + name + ")");
-	document.getElementById(name + "_update_button").disabled = true;
-	var ele = document.getElementById(name + "_chart_period");
+	console.log("get_chart_data()");
+	document.getElementById("_update_button").disabled = true;
+	var ele = document.getElementById("_chart_period");
 	var secs = ele ? ele.value : 0;
 	var xhr = new XMLHttpRequest();
-	xhr.open('GET','/custom/chart_data/' + name +
+	xhr.open('GET','/custom/chart_data' +
 		"?secs=" + secs +
 		"&uuid=" + device_uuid, true);
 	xhr.responseType = 'arraybuffer';
 	xhr.onload = function(e)
 	{
-		create_chart_data(name, this.response);
+		create_chart_data(this.response);
 	};
 	xhr.send();
 }
 
 
-function get_updated_chart_data(name)
-	// an auto-update gets the records SINCE
-	// and the data MUST contain at least one record
+function get_updated_chart_data()
 {
-	let recs = charts[name].recs;
-	var dt = recs[recs.length-1][0];
-	console.log("get_updated_chart_data() since=" + dt);
-	document.getElementById(name + "_update_button").disabled = true;
+	let recs = chart.recs;
+	let max_dt = chart.max_dt;
+	console.log("get_updated_chart_data() since=" + max_dt);
+	document.getElementById("_update_button").disabled = true;
 
 	var xhr = new XMLHttpRequest();
-	xhr.open('GET','/custom/update_chart_data/' + name +
-		"?since=" + dt +
+	xhr.open('GET','/custom/update_chart_data' +
+		"?since=" + max_dt +
 		"&uuid=" + device_uuid, true);
 	xhr.responseType = 'arraybuffer';
 	xhr.onload = function(e)
 	{
-		update_chart_data(name, this.response);
+		update_chart_data(this.response);
 	};
 	xhr.send();
 }
 
 
-function get_chart_header(name)
-	// get the chart_header and chain to get_chart_data
+function get_chart_header()
 {
-	console.log("get_chart_header(" + name + ")");
+	console.log("get_chart_header()");
 	var xhr_init = new XMLHttpRequest();
 	xhr_init.onreadystatechange = function()
 	{
 		if (this.readyState == 4 && this.status == 200)
 		{
-			charts[name] = {};
-			charts[name].header = JSON.parse(this.responseText);
-			get_chart_data(name);
+			chart = {};
+			chart.header = JSON.parse(this.responseText);
+			document.title = chart.header.name + " Chart";
+			get_chart_data();
 		}
     }
-	xhr_init.open('GET','/custom/chart_header/' + name +
+	xhr_init.open('GET','/custom/chart_header' +
 		"?uuid=" + device_uuid,true);
 	xhr_init.send();
 }
 
 
-function doChart(name)
+function doChart()
 {
-	console.log('doChart(' + name + ') called');
-	stopChart(name);
+	console.log('doChart() called');
+	stopChart();
 	$.jqplot.config.enablePlugins = true;
-	setChartElementSize(name);
-	if (!charts[name])
+	setChartElementSize();
+	if (!chart.header)
 	{
-		get_chart_header(name);
+		get_chart_header();
 	}
 	else
 	{
-		get_chart_data(name);
+		get_chart_data();
 	}
 }
 
 
-function stopChart(name)
-	// stopChart() is called when the Widget tab is de-activated and also
-	// at the top of get_chart_data() when we start loading new data
-	// to turn off any existing pending timer for the chart.
+function stopChart()
 {
-	document.getElementById(name + "_update_button").disabled = true;
-	if (charts[name] && charts[name].timer)
+	document.getElementById("_update_button").disabled = true;
+	if (chart.timer)
 	{
-		clearTimeout(charts[name].timer);
-		delete charts[name].timer;
+		clearTimeout(chart.timer);
+		delete chart.timer;
 	}
 }
 

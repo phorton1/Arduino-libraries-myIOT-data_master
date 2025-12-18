@@ -1,0 +1,49 @@
+<head>
+
+<title>Chart</title>
+<link href="/myIOT/jquery.jqplot.min.css?cache=1" rel="stylesheet">
+<script src="/myIOT/jquery-3.6.0.min.js?cache=1?"></script>
+<script src="/myIOT/jquery.jqplot.min.js?cache=1"></script>
+<script src="/myIOT/jqplot.dateAxisRenderer.js?cache=1"></script>
+<script src="/myIOT/jqplot.cursor.js?cache=1"></script>
+<script src="/myIOT/jqplot.highlighter.js?cache=1"></script>
+<script src="/myIOT/jqplot.legendRenderer.js?cache=1"></script>
+<script src="/myIOT/jqplot.legendRenderer.js?cache=1"></script>
+<script src="/myIOT/iotChart.js"></script>
+
+<body>
+<div id='chart_content'></div>
+
+
+<script>
+	function startChart()
+	{
+		// get the device uuid from the document.location
+
+		const re = /uuid=(.*)($|&)/;
+		var match = re.exec(document.location);
+		if (match.length>1)
+			device_uuid = match[1];
+
+		var xhr_html = new XMLHttpRequest();
+		xhr_html.onreadystatechange = function()
+		{
+			if (this.readyState == 4 && this.status == 200)
+			{
+				var ele = document.getElementById('chart_content');
+				ele.innerHTML = this.responseText;
+				doChart();
+			}
+		}
+		xhr_html.open('GET', '/custom/chart_html' +
+			'&uuid=' + device_uuid, true);
+		xhr_html.send();
+
+		onChartResize();
+		window.onresize = onChartResize;
+	}
+
+	window.onload = startChart;
+</script>
+
+</body>
