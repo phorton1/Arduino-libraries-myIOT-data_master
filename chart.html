@@ -10,39 +10,60 @@
 <script src="/myIOT/jqplot.legendRenderer.js?cache=1"></script>
 <script src="/myIOT/jqplot.legendRenderer.js?cache=1"></script>
 <script src="/myIOT/iotChart.js"></script>
+<style>
+  #_degree_type { display: none; }
+</style>
+
 
 <body>
-<div id='chart_content'></div>
+<div id='chart_content'>
+	<div id='_chart' class='iot_chart'></div>
+
+	&nbsp;&nbsp;&nbsp;
+	<button id='_update_button' onclick='onUpdate()' disabled>Update</button>
+
+	&nbsp;&nbsp;&nbsp;
+	<label for='_chart_period'>Chart Period:</label>
+	<select name='period' id='_chart_period' onchange='onPeriodChanged()'>
+		<option value='0'>All</option>
+		<option value='60'>Minute</option>
+		<option value='900'>15 Minutes</option>
+		<option value='3600'>Hour</option>
+		<option value='10800'>3 Hours</option>
+		<option value='43200'>12 Hours</option>
+		<option value='86400'>Day</option>
+		<option value='172800'>2 Days</option>
+		<option value='259200'>3 Days</option>
+		<option value='604800'>Week</option>
+		<option value='2592000'>Month</option>
+		<option value='5184000'>2 Months</option>
+		<option value='7776000'>3 Months</option>
+		<option value='31536000'>Year</option>
+	</select>
+
+	&nbsp;&nbsp;&nbsp;
+	<label for='_refresh_interval'>Refresh Interval:</label>
+	<input id='_refresh_interval' type='number' value='0' min='0' max='999999' onchange='onRefreshChanged()'>
+
+	&nbsp;&nbsp;&nbsp;
+	<label for='_degree_type'>Degree Type:</label>
+	<select name='_degree_type' id='_degree_type' onchange='onDegreesChanged()'>
+		<option value='0'>Centigrade</option>
+		<option value='1'>Farenheit</option>
+	</select>
+</div>
 
 
 <script>
 	function startChart()
 	{
 		// get the device uuid from the document.location
-
 		const re = /uuid=(.*)($|&)/;
 		var match = re.exec(document.location);
 		if (match.length>1)
 			device_uuid = match[1];
-
-		var xhr_html = new XMLHttpRequest();
-		xhr_html.onreadystatechange = function()
-		{
-			if (this.readyState == 4 && this.status == 200)
-			{
-				var ele = document.getElementById('chart_content');
-				ele.innerHTML = this.responseText;
-				doChart();
-			}
-		}
-		xhr_html.open('GET', '/custom/chart_html' +
-			'&uuid=' + device_uuid, true);
-		xhr_html.send();
-
-		onChartResize();
-		window.onresize = onChartResize;
+		beginChart();
 	}
-
 	window.onload = startChart;
 </script>
 

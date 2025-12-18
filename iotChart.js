@@ -573,8 +573,16 @@ function get_chart_header()
 		if (this.readyState == 4 && this.status == 200)
 		{
 			chart = {};
-			chart.header = JSON.parse(this.responseText);
-			document.title = chart.header.name + " Chart";
+			let header = JSON.parse(this.responseText);
+			chart.header = header;
+			document.title = header.name + " Chart";
+			if (header.with_degrees)
+			{
+			    let control = document.getElementById("_degree_type");
+				control.style.display = "inline";  // reveal it
+			}
+			document.getElementById('_chart_period').value =
+				header.default_period;
 			get_chart_data();
 		}
     }
@@ -584,10 +592,10 @@ function get_chart_header()
 }
 
 
-function doChart()
+function beginChart()
 	// called only when initial chart html is loaded
 {
-	console.log('doChart() called');
+	console.log('beginChart() called');
 	$.jqplot.config.enablePlugins = true;
 	disableControls(true);
 	setChartElementSize();
