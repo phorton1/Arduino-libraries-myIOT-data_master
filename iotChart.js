@@ -36,7 +36,7 @@ function onChartResize()
 {
 	setChartElementSize();
 	if (chart.plot)
-		chart.plot.replot( { resetAxes: true } );
+		create_chart();
 }
 
 
