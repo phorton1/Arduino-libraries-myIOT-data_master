@@ -28,7 +28,7 @@ function disableControls(disable)
 	disableOne("_update_button",disable);
 	disableOne("_chart_period",disable);
 	disableOne("_refresh_interval",disable);
-	disableOne("_degree_select",disable);
+	disableOne("_degree_type",disable);
 }
 
 
@@ -103,7 +103,7 @@ function determineNumTicks()
 
 function getSeriesData()
 {
-	let ele = document.getElementById('_degree_select');
+	let ele = document.getElementById('_degree_type');
 	let is_faren = ele ? parseInt(ele.value) : 0;
 
 	let header = chart.header;
