@@ -577,10 +577,7 @@ function get_chart_header()
 			chart.header = header;
 			document.title = header.name + " Chart";
 			if (header.with_degrees)
-			{
-			    let control = document.getElementById("_degree_type");
-				control.style.display = "inline";  // reveal it
-			}
+				$('.degree_hidden').removeClass('degree_hidden');
 			document.getElementById('_chart_period').value =
 				header.default_period;
 			get_chart_data();

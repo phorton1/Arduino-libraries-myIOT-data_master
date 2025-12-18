@@ -11,7 +11,7 @@
 <script src="/myIOT/jqplot.legendRenderer.js?cache=1"></script>
 <script src="/myIOT/iotChart.js"></script>
 <style>
-  #_degree_type { display: none; }
+  .degree_hidden { display: none; }
 </style>
 
 
@@ -24,7 +24,7 @@
 
 	&nbsp;&nbsp;&nbsp;
 	<label for='_chart_period'>Chart Period:</label>
-	<select name='period' id='_chart_period' onchange='onPeriodChanged()'>
+	<select name='period' id='_chart_period' class='onchange='onPeriodChanged()'>
 		<option value='0'>All</option>
 		<option value='60'>Minute</option>
 		<option value='900'>15 Minutes</option>
@@ -46,8 +46,8 @@
 	<input id='_refresh_interval' type='number' value='0' min='0' max='999999' onchange='onRefreshChanged()'>
 
 	&nbsp;&nbsp;&nbsp;
-	<label for='_degree_type'>Degree Type:</label>
-	<select name='_degree_type' id='_degree_type' onchange='onDegreesChanged()'>
+	<label for='_degree_type' class='degree_hidden'>Degree Type:</label>
+	<select name='_degree_type' id='_degree_type' class='degree_hidden' onchange='onDegreesChanged()'>
 		<option value='0'>Centigrade</option>
 		<option value='1'>Farenheit</option>
 	</select>
