@@ -62,43 +62,58 @@ function onChartResize()
 function determineNumTicks()
 {
     const header = chart.header;
-    let maxSpaces = 0;
+    let max_spaces = 0;
 
-    // First pass: snap mins to interval multiples and compute needed spaces
+    // FIRST PASS: snap mins to interval multiples and compute spaces
+
     for (let i = 0; i < header.num_cols; i++)
     {
         const col = header.col[i];
         const interval = col.tick_interval;
-        const lowStep  = Math.floor((col.min) / interval);
-        const highStep = Math.ceil((col.max) / interval);
-        const snappedMin = lowStep * interval;
-        const spaces     = highStep - lowStep;   // number of tick spaces
 
-        col.min = snappedMin;
-        if (spaces > maxSpaces)
-        {
-            maxSpaces = spaces;
-        }
+        const low_step  = Math.floor(col.min / interval);
+        const high_step = Math.ceil(col.max / interval);
+
+        const snapped_min = low_step * interval;
+        const spaces = high_step - low_step;
+
+        col.min = snapped_min;
+
+        if (spaces > max_spaces)
+            max_spaces = spaces;
     }
 
-    // Second pass: assign max for all columns to use same number of spaces
+    // SECOND PASS: assign max for all columns to use same number of spaces
+
     for (let i = 0; i < header.num_cols; i++)
     {
         let col = header.col[i];
         let interval = col.tick_interval;
-        col.max = col.min + (maxSpaces * interval);
+
+        col.max = col.min + (max_spaces * interval);
     }
 
     // numberTicks is spaces + 1 (gridlines/labels count)
-    const numberTicks = maxSpaces + 1;
-    console.log("determineNumTicks() returning " + numberTicks);
+
+    const number_ticks = max_spaces + 1;
+    console.log("determineNumTicks() returning " + number_ticks);
     for (let j = 0; j < header.num_cols; j++)
     {
-        console.log("   col[" + j + "]  min=" + header.col[j].min + "  max=" + header.col[j].max);
+        console.log("   col[" + j +
+			"]  min=" + header.col[j].min +
+            "  max=" + header.col[j].max);
     }
-    return numberTicks;
-}
 
+
+	// new: store full-chart tick count when not zoomed
+	if (!chart.is_zoomed)
+	{
+		chart.full_num_ticks = number_ticks;
+		chart.full_spaces = max_spaces;
+	}
+
+    return number_ticks;
+}
 
 
 function getSeriesData()
@@ -109,20 +124,28 @@ function getSeriesData()
 	let header = chart.header;
 	let col = header.col;
 	let data = [];
-	for (var i=0; i<header.num_cols; i++)
+
+	// initialize arrays and min/max
+
+	for (var i = 0; i < header.num_cols; i++)
 	{
 		data[i] = [];
-		col[i]['min'] = null;
-		col[i]['max'] = null;
+		col[i].min = null;
+		col[i].max = null;
 	}
+
+	// FIRST PASS: build full data arrays and compute min/max
+
 	let recs = chart.recs;
-	for (let i=0; i<recs.length; i++)
+	for (let i = 0; i < recs.length; i++)
 	{
 		let rec = recs[i];
 		let dt = rec[0];
-		for (let j=0; j<header.num_cols; j++)
+
+		for (let j = 0; j < header.num_cols; j++)
 		{
 			let val = rec[j+1];
+
 			if (is_faren && col[j].type == "temperature_t")
 				val = centigradeToFarenheit(val);
 
@@ -137,206 +160,286 @@ function getSeriesData()
 				if (val > col[j].max) col[j].max = val;
 			}
 
-			data[j].push([dt*1000,val]);
+			data[j].push([dt * 1000, val]);
 		}
 	}
-	console.log("getSeriesData() returning " + recs.length + "*" + data.length + " records");
-	for (let j=0; j<header.num_cols; j++)
+
+	console.log("getSeriesData() built full dataset " + recs.length + "*" + data.length);
+	for (let j = 0; j < header.num_cols; j++)
 	{
-		console.log("   col[" + j + "]  min=" + col[j].min + "  max=" + col[j].max);
+		console.log("   full col[" + j + "]  min=" + col[j].min + "  max=" + col[j].max);
 	}
+
+	// SECOND PASS: apply zoom window filter if present
+
+	if (chart.is_zoomed && chart.zoom_window)
+	{
+		let zw = chart.zoom_window;
+
+		let filtered_data = [];
+		let filtered_min = [];
+		let filtered_max = [];
+
+		for (let j = 0; j < header.num_cols; j++)
+		{
+			filtered_data[j] = [];
+			filtered_min[j] = null;
+			filtered_max[j] = null;
+		}
+
+		for (let j = 0; j < header.num_cols; j++)
+		{
+			let series = data[j];
+
+			for (let k = 0; k < series.length; k++)
+			{
+				let x = series[k][0];
+				let y = series[k][1];
+
+				// in essence we are only zooming on the x axis and
+				// will redraw the whole chart for that range.
+				
+				if (x >= zw.x_min && x <= zw.x_max)	// &&
+					// y >= zw.y_min[j] && y <= zw.y_max[j])
+				{
+					filtered_data[j].push([x, y]);
+
+					if (filtered_min[j] == null)
+					{
+						filtered_min[j] = y;
+						filtered_max[j] = y;
+					}
+					else
+					{
+						if (y < filtered_min[j]) filtered_min[j] = y;
+						if (y > filtered_max[j]) filtered_max[j] = y;
+					}
+				}
+			}
+		}
+
+		// replace original data and min/max with filtered versions
+
+		data = filtered_data;
+		for (let j = 0; j < header.num_cols; j++)
+		{
+			col[j].min = filtered_min[j];
+			col[j].max = filtered_max[j];
+		}
+
+		console.log("getSeriesData() applied zoom filter");
+		for (let j = 0; j < header.num_cols; j++)
+		{
+			console.log("   zoom col[" + j + "]  min=" + col[j].min + "  max=" + col[j].max);
+		}
+	}
+
 	return data;
 }
 
 
+
 function create_chart()
 {
-	// Destroy the previous jqPlot object
-	
-	let prevZoom = null;
-	if (chart.plot)
-	{
-		// Capture the zoom level if not told to draw the full chart
-		// AND the x_axis, as an indicator, has changed since the lalst
-		// full draw.  In this way an auto-refresh that only gets incremental
-		// data will still reset the axes EXCEPT if it has been zoomed in the
-		// meantime.
+    // Destroy the previous jqPlot object
 
-		let x_min = chart.plot.axes.xaxis.min;
-		let x_max = chart.plot.axes.xaxis.max;
+    let zoom_window = null;
+    if (chart.plot)
+    {
+        // Capture the zoom window before destroying the plot
 
-		if (!chart.draw_full_chart &&
-			(chart.last_x_min != x_min ||
-			 chart.last_x_max != x_max))
-		{
-			prevZoom = {
-				xaxis: {
-					min: x_min,
-					max: x_max,
-				},
-				yaxes: []
-			};
-			for (let i = 0; i < chart.header.num_cols; i++)
-			{
-				let axisName = i === 0 ? "yaxis" : "y" + (i+1) + "axis";
-				prevZoom.yaxes[i] = {
-					min: chart.plot.axes[axisName].min,
-					max: chart.plot.axes[axisName].max
-				};
-			}
-		}
-		chart.plot.destroy();
-		delete chart.plot;
-	}
+        if (chart.is_zoomed)
+        {
+            zoom_window = {
+                x_min : chart.plot.axes.xaxis.min,
+                x_max : chart.plot.axes.xaxis.max,
+                y_min : [],
+                y_max : []
+            };
 
-	// build the series data, num_ticks, colors and
-	// create the options
+            for (let i = 0; i < chart.header.num_cols; i++)
+            {
+                let axis_name = (i === 0 ? 'yaxis' : ('y' + (i+1) + 'axis'));
+                zoom_window.y_min[i] = chart.plot.axes[axis_name].min;
+                zoom_window.y_max[i] = chart.plot.axes[axis_name].max;
+            }
 
-	let data = getSeriesData();
-	let header = chart.header;
-	let series_colors = header.series_colors || defaultSeriesColors;
-	let num_ticks = determineNumTicks();
+            chart.zoom_window = zoom_window;
+        }
 
-	let options = {
+        chart.plot.destroy();
+        delete chart.plot;
+    }
 
-		title: header.name,
-		seriesDefaults: {
-			showMarker : false
-		},
+    // build the series data, num_ticks, colors and
+    // create the options
 
-		legend : {
-			renderer: $.jqplot.EnhancedLegendRenderer,
-			show: true,
-			showLabels: true,
-			rendererOptions: {
-				numberRows: 1,
-			},
-		},
-		series: [],
-		axes:{
-			xaxis:{
-				renderer:$.jqplot.DateAxisRenderer,
-			},
-		},	// axes
+    let data = getSeriesData();
+    let header = chart.header;
+    let series_colors = header.series_colors || defaultSeriesColors;
 
-		seriesColors: series_colors,
+    let num_ticks = chart.is_zoomed ? chart.full_num_ticks : determineNumTicks();
+		// new: reuse full tick count during zoom
+		// old: always recomputed ticks
 
-		cursor : {
-			zoom:true,
-			looseZoom: true,
-			showTooltip:true,
-			followMouse: true,
-			showTooltipOutsideZoom: true,
-			constrainOutsideZoom: false
-		},
+    let options = {
 
-	};	// options
+        title: header.name,
+        seriesDefaults: {
+            showMarker : false
+        },
 
-	// fixup the axes according to my styling preferences
+        legend : {
+            renderer: $.jqplot.EnhancedLegendRenderer,
+            show: true,
+            showLabels: true,
+            rendererOptions: {
+                numberRows: 1,
+            },
+        },
+        series: [],
+        axes:{
+            xaxis:{
+                renderer:$.jqplot.DateAxisRenderer,
+            },
+        },  // axes
 
-	let col = header.col;
-	for (var i=0; i<header.num_cols; i++)
-	{
-		var axis_name = 'y';
-		if (i>0) axis_name += (i+1);
-		axis_name += 'axis';
+        seriesColors: series_colors,
 
-		options.axes[ axis_name ] = {
-			pad: 1.2,
-			show: true,
-			label: col[i].name,
-			showLabel : false,	// the axes are the same as the legend
-			min: col[i].min,
-			max: col[i].max,
-			tickInterval: col[i].tick_interval,
-			// numberTicks: num_ticks   // optional, only if you want uniform count
-		};
-		options.series[i] = {
-			showMarker: 0,
-			showLine: 1,
-			label: col[i].name,
-			shadow : false,
-			lineWidth: 2,
-			yaxis: (i === 0 ? 'yaxis' : ('y' + (i+1) + 'axis'))
-		};
-	}
+        cursor : {
+            zoom:true,
+            looseZoom: true,
+            showTooltip:true,
+            followMouse: true,
+            showTooltipOutsideZoom: true,
+            constrainOutsideZoom: false
+        },
 
-	// apply the previous zoom if we captured it
+    };  // options
 
-	if (prevZoom)
-	{
-		options.axes.xaxis.min = prevZoom.xaxis.min;
-		options.axes.xaxis.max = prevZoom.xaxis.max;
-		for (let i = 0; i < header.num_cols; i++)
-		{
-			let axisName = i === 0 ? "yaxis" : "y" + (i+1) + "axis";
-			options.axes[axisName].min = prevZoom.yaxes[i].min;
-			options.axes[axisName].max = prevZoom.yaxes[i].max;
-		}
-	}
+    // fixup the axes according to my styling preferences
 
-	// DO THE PLOT
-	// and, if drawing the full chart, capture the
-	// resultant actual xaxis min/max as a way to
-	// detect if the user zoomed in the meantime.
+    let col = header.col;
+    for (var i=0; i<header.num_cols; i++)
+    {
+        var axis_name = 'y';
+        if (i>0) axis_name += (i+1);
+        axis_name += 'axis';
 
-	var plot = $.jqplot('_chart', data, options);
-	chart.plot = plot;
-	if (chart.draw_full_chart)
-	{
-		chart.last_x_min = plot.axes.xaxis.min;
-		chart.last_x_max = plot.axes.xaxis.max;
-	}
+        options.axes[ axis_name ] = {
+            pad: 1.2,
+            show: true,
+            label: col[i].name,
+            showLabel : false,   // the axes are the same as the legend
 
-	// reverse the order of the canvasas so that
-	// the most important one (zero=temperature1)
-	// is on top.
+            min: chart.is_zoomed ? chart.zoom_window.y_min[i] : col[i].min,   // new
+            max: chart.is_zoomed ? chart.zoom_window.y_max[i] : col[i].max,   // new
+            // old: min: col[i].min,
+            // old: max: col[i].max,
 
-	for (var i=header.num_cols-1; i>=0; i--)
-	{
-		plot.moveSeriesToFront(i);
-	}
-	
-	// add a click handler to the enhancedLegendRenderer
-	// legend swatches so that when a series is made
-	// visible it is moved to the top, so toggling
-	// them on and off effectively lets the user set
-	// the z-order ..
+            tickInterval: col[i].tick_interval,
+            // numberTicks: num_ticks   // optional
+        };
 
-	$('td.jqplot-table-legend-swatch')
-		.off('click')
-		.each(function(i)
-		{
-			$(this).on('click', { index: i }, function(ev)
-			{
-				var index = ev.data.index;
-				plot.moveSeriesToFront(index);
-			});
-		});
+        options.series[i] = {
+            showMarker: 0,
+            showLine: 1,
+            label: col[i].name,
+            shadow : false,
+            lineWidth: 2,
+            yaxis: (i === 0 ? 'yaxis' : ('y' + (i+1) + 'axis'))
+        };
+    }
 
-	// set refresh timer if appropriate
+    // DO THE PLOT
 
-	setRefreshTimer();
+    var plot = $.jqplot('_chart', data, options);
+    chart.plot = plot;
 
-	// enable the controls
+    // reverse the order of the canvases so that
+    // the most important one (zero=temperature1)
+    // is on top.
 
-	disableControls(false);
+    for (var i=header.num_cols-1; i>=0; i--)
+    {
+        plot.moveSeriesToFront(i);
+    }
 
-	// clear the no_autozoom value and
-	// bind a handler to the jqPlotResetZoom method so that
-	// if the user double clicks on the chart, we redraw it
-	// without zooming.
+    // add a click handler to the enhancedLegendRenderer
+    // legend swatches so that when a series is made
+    // visible it is moved to the top, so toggling
+    // them on and off effectively lets the user set
+    // the z-order ..
+
+    $('td.jqplot-table-legend-swatch')
+        .off('click')
+        .each(function(i)
+        {
+            $(this).on('click', { index: i }, function(ev)
+            {
+                var index = ev.data.index;
+                plot.moveSeriesToFront(index);
+            });
+        });
+
+    // set refresh timer if appropriate
+
+    setRefreshTimer();
+
+    // enable the controls
+
+    disableControls(false);
+
+    // unbind/bind jqplot zoom handlers
 
     chart.draw_full_chart = false;
-	$('#_chart')
-		.off('jqplotResetZoom')
-		.on('jqplotResetZoom', function(ev, plot)
-		{
-			chart.draw_full_chart = true;
-			create_chart();
-		});
 
-}	// create_chart()
+    $('#_chart')
+        .off('jqplotZoom')
+        .on('jqplotZoom', function(ev, gridpos, datapos, plot, cursor)
+        {
+            chart.is_zoomed = true;
+
+			// gridpos.x and gridpos.y are the grid relative positions of the end of the zoom
+			// datapos.x is relative to my single datetime axis; datapos.y is relative to the 0th y axis
+			// at this point we can also get the grid relative pixel starting position from cursor.zoomStart.x and y
+			// The padding around the grid is given by plot._gridPadding.left, .top, .bottom, and .right
+			// Plot._plotDimensions gives the .width and .height of the outer plot area, so the grid rectangle
+			// can be calculated with x=pad.left, y=pad.top, w=dim.width-pad.left-pad.right, and h=dim.height-pad.top-pad.bottom
+			// DOM relative coordinates can be calculated with
+			//		var offset = $('#_chart').offset();   // page coordinates of the plot container
+			//		var globalX = offset.left + gridpos.x + plot._gridPadding.left;
+			//		var globalY = offset.top  + gridpos.y + plot._gridPadding.top;
+			// and viewport relative coordinates with
+			//		var viewportX = globalX - window.scrollX;
+			//		var viewportY = globalY - window.scrollY;
+
+            chart.zoom_window = {
+                x_min : plot.axes.xaxis.min,
+                x_max : plot.axes.xaxis.max,
+                y_min : [],
+                y_max : []
+            };
+
+            for (let i = 0; i < header.num_cols; i++)
+            {
+                let axis_name = (i === 0 ? 'yaxis' : 'y' + (i+1) + 'axis');
+                chart.zoom_window.y_min[i] = plot.axes[axis_name].min;   // new
+                chart.zoom_window.y_max[i] = plot.axes[axis_name].max;   // new
+            }
+        });
+
+    $('#_chart')
+        .off('jqplotResetZoom')
+        .on('jqplotResetZoom', function(ev, plot)
+        {
+            chart.is_zoomed = false;
+            create_chart();
+        });
+
+}   // create_chart()
+
+
 
 
 
@@ -388,7 +491,6 @@ function onPeriodChanged()
 {
     console.log('onPeriodChanged()');
 	stopTimer();
-	chart.draw_full_chart = true;
 	get_chart_data();
 }
 
@@ -398,9 +500,6 @@ function onUpdate()
 {
     console.log('onUpdate()');
 	stopTimer();
-	chart.draw_full_chart = true;
-		// pressing the update button always redraws the
-		// entire chart unzoomed
 		
 	// if we've previously plotted this number of seconds
 	// and there was at least one value as given by max_dt
@@ -427,7 +526,6 @@ function onRefreshChanged()
     console.log('onRefreshChanged()');
 	stopTimer();
 	disableControls(true);
-	chart.draw_full_chart = true;
 	create_chart();
 }
 
@@ -437,7 +535,6 @@ function onDegreesChanged()
     console.log('onDegreesChanged()');
 	stopTimer();
 	disableControls(true);
-	chart.draw_full_chart = true;
 	create_chart();
 }
 
@@ -599,7 +696,6 @@ function get_chart_header()
 				$('.degree_hidden').removeClass('degree_hidden');
 			document.getElementById('_chart_period').value =
 				header.default_period;
-			chart.draw_full_chart = true;
 			get_chart_data();
 		}
     }
