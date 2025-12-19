@@ -62,6 +62,8 @@
 		var match = re.exec(document.location);
 		if (match.length>1)
 			device_uuid = match[1];
+		onChartResize();
+		window.onresize = onChartResize;
 		beginChart();
 	}
 	window.onload = startChart;
