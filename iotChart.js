@@ -151,19 +151,28 @@ function getSeriesData()
 
 function create_chart()
 {
-	// Capture the zoom level if the plot exists
-	// UNLESS we are being called from the double-click
-	// jqplotResetZoom handler
+	// Destroy the previous jqPlot object
 	
 	let prevZoom = null;
 	if (chart.plot)
 	{
-		if (!chart.no_auto_zoom)
+		// Capture the zoom level if not told to draw the full chart
+		// AND the x_axis, as an indicator, has changed since the lalst
+		// full draw.  In this way an auto-refresh that only gets incremental
+		// data will still reset the axes EXCEPT if it has been zoomed in the
+		// meantime.
+
+		let x_min = chart.plot.axes.xaxis.min;
+		let x_max = chart.plot.axes.xaxis.max;
+
+		if (!chart.draw_full_chart &&
+			(chart.last_x_min != x_min ||
+			 chart.last_x_max != x_max))
 		{
 			prevZoom = {
 				xaxis: {
-					min: chart.plot.axes.xaxis.min,
-					max: chart.plot.axes.xaxis.max
+					min: x_min,
+					max: x_max,
 				},
 				yaxes: []
 			};
@@ -267,8 +276,17 @@ function create_chart()
 	}
 
 	// DO THE PLOT
+	// and, if drawing the full chart, capture the
+	// resultant actual xaxis min/max as a way to
+	// detect if the user zoomed in the meantime.
 
 	var plot = $.jqplot('_chart', data, options);
+	chart.plot = plot;
+	if (chart.draw_full_chart)
+	{
+		chart.last_x_min = plot.axes.xaxis.min;
+		chart.last_x_max = plot.axes.xaxis.max;
+	}
 
 	// reverse the order of the canvasas so that
 	// the most important one (zero=temperature1)
@@ -296,10 +314,6 @@ function create_chart()
 			});
 		});
 
-	// remember the plot
-
-	chart.plot = plot;
-
 	// set refresh timer if appropriate
 
 	setRefreshTimer();
@@ -313,12 +327,12 @@ function create_chart()
 	// if the user double clicks on the chart, we redraw it
 	// without zooming.
 
-    chart.no_auto_zoom = false;
+    chart.draw_full_chart = false;
 	$('#_chart')
 		.off('jqplotResetZoom')
 		.on('jqplotResetZoom', function(ev, plot)
 		{
-			chart.no_auto_zoom = true;
+			chart.draw_full_chart = true;
 			create_chart();
 		});
 
@@ -357,7 +371,8 @@ function setRefreshTimer()
 // UI event handlers
 //--------------------------
 // These methods can only be called after a plot
-// has been created at least once.
+// has been created at least once.  Any UI interaction
+// through a control sets draw_full_chart = true;
 
 function stopTimer()
 {
@@ -373,7 +388,7 @@ function onPeriodChanged()
 {
     console.log('onPeriodChanged()');
 	stopTimer();
-	chart.no_auto_zoom = true;
+	chart.draw_full_chart = true;
 	get_chart_data();
 }
 
@@ -383,7 +398,10 @@ function onUpdate()
 {
     console.log('onUpdate()');
 	stopTimer();
-
+	chart.draw_full_chart = true;
+		// pressing the update button always redraws the
+		// entire chart unzoomed
+		
 	// if we've previously plotted this number of seconds
 	// and there was at least one value as given by max_dt
 	// then do an update instead of getting all the data
@@ -398,7 +416,6 @@ function onUpdate()
 	}
 	else
 	{
-		chart.no_auto_zoom = true;
 		get_chart_data();
 	}
 
@@ -410,7 +427,7 @@ function onRefreshChanged()
     console.log('onRefreshChanged()');
 	stopTimer();
 	disableControls(true);
-	chart.no_auto_zoom = true;
+	chart.draw_full_chart = true;
 	create_chart();
 }
 
@@ -420,7 +437,7 @@ function onDegreesChanged()
     console.log('onDegreesChanged()');
 	stopTimer();
 	disableControls(true);
-	chart.no_auto_zoom = true;
+	chart.draw_full_chart = true;
 	create_chart();
 }
 
@@ -524,6 +541,8 @@ function get_chart_data()
 {
 	console.log("get_chart_data()");
 	disableControls(true);
+	delete chart.max_dt;
+		// reset max_dt when getting all records
 	let secs = getChartSecs();
 	chart.secs = secs;
 	
@@ -580,6 +599,7 @@ function get_chart_header()
 				$('.degree_hidden').removeClass('degree_hidden');
 			document.getElementById('_chart_period').value =
 				header.default_period;
+			chart.draw_full_chart = true;
 			get_chart_data();
 		}
     }
