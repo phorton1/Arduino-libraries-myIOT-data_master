@@ -16,6 +16,13 @@ function centigradeToFarenheit(centigrade)
 }
 
 
+function getChartSecs()
+{
+	var ele = document.getElementById("_chart_period");
+	return ele ? ele.value : 0;
+}
+
+
 function disableOne(id,disable)
 {
 	let ele = document.getElementById(id);
@@ -55,9 +62,96 @@ function onChartResize()
 }
 
 
+
 //-------------------------------
-// plot creation
+// create_chart() sub methods
 //-------------------------------
+
+
+function captureZoomAndVisibility(zoomed)
+	// capture/delete the zoom_window and capture series visibility
+{
+	let plot = chart.plot;
+	if (zoomed)
+	{
+		chart.zoom_window = {
+			x_min : plot.axes.xaxis.min,
+			x_max : plot.axes.xaxis.max,
+			y_min : [],
+			y_max : []
+		};
+	
+		for (let i=0; i< plot.series.length; i++)
+		{
+			let axis_name = (i === 0 ? 'yaxis' : 'y' + (i+1) + 'axis');
+			chart.zoom_window.y_min[i] = plot.axes[axis_name].min;   // new
+			chart.zoom_window.y_max[i] = plot.axes[axis_name].max;   // new
+		}
+	}
+	else
+	{
+		delete chart.zoom_window;
+	}
+
+	chart.series_visible = [];
+	for (let i = 0; i < plot.series.length; i++)
+	{
+		chart.series_visible[i] = plot.series[i].show;
+	}
+}
+
+
+function onLegendClick(ev)
+	// called from anonymous enclosure setup in beginChart()
+	// brings series to the front and maintains the series_zorder
+	// array for the setZOrder() method.
+{
+    var index = ev.data.index;
+
+    // move clicked series (i.e. 2) to the end of the array
+	// and move it to "top" (end) of the array (i.e. 4,3,1,0,2)
+    var pos = chart.series_zorder.indexOf(index);
+    chart.series_zorder.splice(pos, 1);
+    chart.series_zorder.push(index);
+
+	// move it the front in jqplot
+    chart.plot.moveSeriesToFront(index);
+
+    // capture zoom + visibility 
+    captureZoomAndVisibility(chart.zoom_window);
+}
+
+
+function setZOrder()
+{
+	let plot = chart.plot;
+	let zorder = chart.series_zorder;
+    if (zorder)
+    {
+		// Thereafter moveSerieesToFront from the zorder (i.e. 4,3,2,1,0)
+		// to effect the desired canvas stack
+        for (let i=0; i<zorder.length; i++)
+        {
+            plot.moveSeriesToFront(zorder[i]);
+        }
+    }
+    else
+    {
+		// On initial load, the first plot, from beginChart(),
+		// reverse the order of the canvases so that
+		// the most important one (the zeroth series) is on top and
+		// create backwards zorder array [4,3,2,1,0]
+		chart.series_zorder = [];
+		let series = chart.plot.series;
+        for (var i=series.length-1; i>=0; i--)
+        {
+			chart.series_zorder.push(i);
+            plot.moveSeriesToFront(i);
+        }
+    }
+}
+
+
 
 function determineNumTicks()
 {
@@ -104,9 +198,9 @@ function determineNumTicks()
             "  max=" + header.col[j].max);
     }
 
+	// store full-chart tick count when not zoomed
 
-	// new: store full-chart tick count when not zoomed
-	if (!chart.is_zoomed)
+	if (!chart.zoom_window)
 	{
 		chart.full_num_ticks = number_ticks;
 		chart.full_spaces = max_spaces;
@@ -172,7 +266,7 @@ function getSeriesData()
 
 	// SECOND PASS: apply zoom window filter if present
 
-	if (chart.is_zoomed && chart.zoom_window)
+	if (chart.zoom_window)
 	{
 		let zw = chart.zoom_window;
 
@@ -239,48 +333,28 @@ function getSeriesData()
 
 
 
+//------------------------------------------------------------------
+// create_chart()
+//------------------------------------------------------------------
+
 function create_chart()
 {
     // Destroy the previous jqPlot object
 
-    let zoom_window = null;
     if (chart.plot)
     {
-        // Capture the zoom window before destroying the plot
-
-        if (chart.is_zoomed)
-        {
-            zoom_window = {
-                x_min : chart.plot.axes.xaxis.min,
-                x_max : chart.plot.axes.xaxis.max,
-                y_min : [],
-                y_max : []
-            };
-
-            for (let i = 0; i < chart.header.num_cols; i++)
-            {
-                let axis_name = (i === 0 ? 'yaxis' : ('y' + (i+1) + 'axis'));
-                zoom_window.y_min[i] = chart.plot.axes[axis_name].min;
-                zoom_window.y_max[i] = chart.plot.axes[axis_name].max;
-            }
-
-            chart.zoom_window = zoom_window;
-        }
-
         chart.plot.destroy();
         delete chart.plot;
     }
 
-    // build the series data, num_ticks, colors and
-    // create the options
+    // build the series data, num_ticks, and colors
 
     let data = getSeriesData();
     let header = chart.header;
     let series_colors = header.series_colors || defaultSeriesColors;
+    let num_ticks = chart.zoom_window ? chart.full_num_ticks : determineNumTicks();
 
-    let num_ticks = chart.is_zoomed ? chart.full_num_ticks : determineNumTicks();
-		// new: reuse full tick count during zoom
-		// old: always recomputed ticks
+	// create the options
 
     let options = {
 
@@ -295,14 +369,17 @@ function create_chart()
             showLabels: true,
             rendererOptions: {
                 numberRows: 1,
+				seriesToggle: true,
+				seriesToggleReplot: true
             },
         },
+
         series: [],
         axes:{
             xaxis:{
                 renderer:$.jqplot.DateAxisRenderer,
             },
-        },  // axes
+        },
 
         seriesColors: series_colors,
 
@@ -317,7 +394,7 @@ function create_chart()
 
     };  // options
 
-    // fixup the axes according to my styling preferences
+    // Add the Y axes options
 
     let col = header.col;
     for (var i=0; i<header.num_cols; i++)
@@ -330,18 +407,14 @@ function create_chart()
             pad: 1.2,
             show: true,
             label: col[i].name,
-            showLabel : false,   // the axes are the same as the legend
-
-            min: chart.is_zoomed ? chart.zoom_window.y_min[i] : col[i].min,   // new
-            max: chart.is_zoomed ? chart.zoom_window.y_max[i] : col[i].max,   // new
-            // old: min: col[i].min,
-            // old: max: col[i].max,
-
+            showLabel : false,
+            min: chart.zoom_window ? chart.zoom_window.y_min[i] : col[i].min,
+            max: chart.zoom_window ? chart.zoom_window.y_max[i] : col[i].max,
             tickInterval: col[i].tick_interval,
-            // numberTicks: num_ticks   // optional
         };
 
         options.series[i] = {
+            show : chart.series_visible ? chart.series_visible[i] : true,
             showMarker: 0,
             showLine: 1,
             label: col[i].name,
@@ -355,90 +428,31 @@ function create_chart()
 
     var plot = $.jqplot('_chart', data, options);
     chart.plot = plot;
+    setZOrder();
 
-    // reverse the order of the canvases so that
-    // the most important one (zero=temperature1)
-    // is on top.
-
-    for (var i=header.num_cols-1; i>=0; i--)
-    {
-        plot.moveSeriesToFront(i);
-    }
-
-    // add a click handler to the enhancedLegendRenderer
-    // legend swatches so that when a series is made
-    // visible it is moved to the top, so toggling
-    // them on and off effectively lets the user set
-    // the z-order ..
-
-    $('td.jqplot-table-legend-swatch')
-        .off('click')
-        .each(function(i)
-        {
-            $(this).on('click', { index: i }, function(ev)
-            {
-                var index = ev.data.index;
-                plot.moveSeriesToFront(index);
-            });
-        });
-
-    // set refresh timer if appropriate
-
-    setRefreshTimer();
-
-    // enable the controls
-
-    disableControls(false);
-
-    // unbind/bind jqplot zoom handlers
-
-    chart.draw_full_chart = false;
+	// attach handlers
 
     $('#_chart')
         .off('jqplotZoom')
         .on('jqplotZoom', function(ev, gridpos, datapos, plot, cursor)
         {
-            chart.is_zoomed = true;
-
-			// gridpos.x and gridpos.y are the grid relative positions of the end of the zoom
-			// datapos.x is relative to my single datetime axis; datapos.y is relative to the 0th y axis
-			// at this point we can also get the grid relative pixel starting position from cursor.zoomStart.x and y
-			// The padding around the grid is given by plot._gridPadding.left, .top, .bottom, and .right
-			// Plot._plotDimensions gives the .width and .height of the outer plot area, so the grid rectangle
-			// can be calculated with x=pad.left, y=pad.top, w=dim.width-pad.left-pad.right, and h=dim.height-pad.top-pad.bottom
-			// DOM relative coordinates can be calculated with
-			//		var offset = $('#_chart').offset();   // page coordinates of the plot container
-			//		var globalX = offset.left + gridpos.x + plot._gridPadding.left;
-			//		var globalY = offset.top  + gridpos.y + plot._gridPadding.top;
-			// and viewport relative coordinates with
-			//		var viewportX = globalX - window.scrollX;
-			//		var viewportY = globalY - window.scrollY;
-
-            chart.zoom_window = {
-                x_min : plot.axes.xaxis.min,
-                x_max : plot.axes.xaxis.max,
-                y_min : [],
-                y_max : []
-            };
-
-            for (let i = 0; i < header.num_cols; i++)
-            {
-                let axis_name = (i === 0 ? 'yaxis' : 'y' + (i+1) + 'axis');
-                chart.zoom_window.y_min[i] = plot.axes[axis_name].min;   // new
-                chart.zoom_window.y_max[i] = plot.axes[axis_name].max;   // new
-            }
+            captureZoomAndVisibility(true);
         });
 
     $('#_chart')
         .off('jqplotResetZoom')
         .on('jqplotResetZoom', function(ev, plot)
         {
-            chart.is_zoomed = false;
+            delete chart.zoom_window;
             create_chart();
         });
 
-}   // create_chart()
+    // set refresh timer and enable controls
 
+    setRefreshTimer();
+    disableControls(false);
+
+}   // create_chart()
 
 
 
@@ -470,12 +484,12 @@ function setRefreshTimer()
 }
 
 
+
 //--------------------------
 // UI event handlers
 //--------------------------
 // These methods can only be called after a plot
-// has been created at least once.  Any UI interaction
-// through a control sets draw_full_chart = true;
+// has been created at least once.
 
 function stopTimer()
 {
@@ -493,7 +507,6 @@ function onPeriodChanged()
 	stopTimer();
 	get_chart_data();
 }
-
 
 
 function onUpdate()
@@ -628,12 +641,6 @@ function update_chart_data(abuffer)
 }
 
 
-function getChartSecs()
-{
-	var ele = document.getElementById("_chart_period");
-	return ele ? ele.value : 0;
-}
-
 function get_chart_data()
 {
 	console.log("get_chart_data()");
@@ -706,12 +713,32 @@ function get_chart_header()
 
 
 function beginChart()
-	// called only when initial chart html is loaded
+	// called only from document.onload
+	// when initial chart html is loaded
 {
 	console.log('beginChart() called');
 	$.jqplot.config.enablePlugins = true;
 	disableControls(true);
 	setChartElementSize();
+
+    // attach a handler which subsequently attachs handlers to
+	// legend swatches each time the plot is drawn
+	// this is some weird code
+	// my handler does not get attached until a swatch is clicked on
+	// then, apparently, we attach to two td dom elements
+	// and somehow we get the index of our handler(?) and thus to get
+	// the series index we have to divide by 2.  The ones on one td
+	// would be 0,2,4,6, etc, and the other 1,3,5,7,etc
+
+    $('#_chart').on('jqplotPostDraw', function() {
+        $('td.jqplot-seriesToggle').off('click.iot');
+        $('td.jqplot-seriesToggle').each(function(i) {
+            var seriesIndex = Math.floor(i / 2);	// weird
+            $(this).on('click.iot', { index: seriesIndex }, onLegendClick);
+        });
+    });
+
+
 	get_chart_header();
 }
 
