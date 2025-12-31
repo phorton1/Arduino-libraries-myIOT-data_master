@@ -700,7 +700,15 @@ function get_chart_header()
 			chart.header = header;
 			document.title = header.name + " Chart";
 			if (header.with_degrees)
+			{
 				$('.degree_hidden').removeClass('degree_hidden');
+				if (header.degree_type)
+				{
+					let ele = document.getElementById('_degree_type');
+					if (ele)
+						ele.value = 1;
+				}
+			}
 			document.getElementById('_chart_period').value =
 				header.default_period;
 			get_chart_data();
