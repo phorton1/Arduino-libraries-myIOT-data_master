@@ -16,6 +16,38 @@ function centigradeToFarenheit(centigrade)
 }
 
 
+function getStorage(key)
+{
+	var value = '';
+	try
+	{
+		value = localStorage.getItem(key);
+		if (value == undefined)
+			value = '';
+	}
+	catch (SecurityError)
+	{
+		error(SecurityError);
+	}
+
+	return value;
+}
+
+function putStorage(key,value)
+{
+	try
+	{
+		localStorage.setItem(key,value);
+	}
+	catch (SecurityError)
+	{
+		error(SecurityError);
+	}
+	return value;
+}
+
+
+
 function getChartSecs()
 {
 	var ele = document.getElementById("_chart_period");
@@ -347,6 +379,13 @@ function create_chart()
         delete chart.plot;
     }
 
+	if (!chart.recs.length)
+	{
+		$('#_chart').html("<h3>NO RECORDS FOUND</h3>");
+		disableControls(false);
+		return;
+	}
+
     // build the series data, num_ticks, and colors
 
     let data = getSeriesData();
@@ -504,6 +543,9 @@ function stopTimer()
 function onPeriodChanged()
 {
     console.log('onPeriodChanged()');
+
+	putStorage('chart_period',getChartSecs());
+	
 	stopTimer();
 	get_chart_data();
 }
@@ -643,7 +685,7 @@ function update_chart_data(abuffer)
 
 function get_chart_data()
 {
-	console.log("get_chart_data()");
+	console.log("get_chart_data(" + data_name + ")");
 	disableControls(true);
 	delete chart.max_dt;
 		// reset max_dt when getting all records
@@ -652,7 +694,8 @@ function get_chart_data()
 	
 	var xhr = new XMLHttpRequest();
 	xhr.open('GET','/custom/chart_data' +
-		"?secs=" + secs +
+		"?data_name=" + data_name +
+		"&secs=" + secs +
 		"&uuid=" + device_uuid, true);
 	xhr.responseType = 'arraybuffer';
 	xhr.onload = function(e)
@@ -667,12 +710,13 @@ function get_updated_chart_data()
 {
 	let recs = chart.recs;
 	let max_dt = chart.max_dt;
-	console.log("get_updated_chart_data() since=" + max_dt);
+	console.log("get_updated_chart_data(" + data_name + ") since=" + max_dt);
 	disableControls(true);	
 
 	var xhr = new XMLHttpRequest();
 	xhr.open('GET','/custom/update_chart_data' +
-		"?since=" + max_dt +
+		"?data_name=" + data_name +
+		"&since=" + max_dt +
 		"&uuid=" + device_uuid, true);
 	xhr.responseType = 'arraybuffer';
 	xhr.onload = function(e)
@@ -689,7 +733,7 @@ function get_updated_chart_data()
 
 function get_chart_header()
 {
-	console.log("get_chart_header()");
+	console.log("get_chart_header(" + data_name + ")");
 	var xhr_init = new XMLHttpRequest();
 	xhr_init.onreadystatechange = function()
 	{
@@ -709,13 +753,17 @@ function get_chart_header()
 						ele.value = 1;
 				}
 			}
-			document.getElementById('_chart_period').value =
-				header.default_period;
+
+			let use_period = getStorage("chart_period");
+			if (!use_period)
+				use_period = header.default_period;
+			document.getElementById('_chart_period').value = use_period;
 			get_chart_data();
 		}
     }
 	xhr_init.open('GET','/custom/chart_header' +
-		"?uuid=" + device_uuid,true);
+		"?data_name=" + data_name +
+		"&uuid=" + device_uuid,true);
 	xhr_init.send();
 }
 
@@ -724,7 +772,7 @@ function beginChart()
 	// called only from document.onload
 	// when initial chart html is loaded
 {
-	console.log('beginChart() called');
+	console.log('beginChart(' + data_name + ') called');
 	$.jqplot.config.enablePlugins = true;
 	disableControls(true);
 	setChartElementSize();
