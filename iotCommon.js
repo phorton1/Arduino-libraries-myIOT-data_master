@@ -601,7 +601,7 @@ function handleWS(ws_event)
         device_name = obj.device_name;
         device_uuid = obj.uuid;
         device_url = obj.device_url;
-        console.log("device_name=" + device_name + " device_uuid=$uuid");
+        console.log("device_name='" + device_name + "' device_uuid=" + device_uuid);
         if (!is_server)
             document.title = device_name;
         $('#DEVICE_NAME').html('<a href="' + device_url + '" class="my_device_link" target="_blank">' + device_name + "</a>");
