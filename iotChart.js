@@ -274,7 +274,7 @@ function getSeriesData()
 
 			if (is_faren && (
 				col[j].type == "centigrade32_t" ||
-				col[j].type == "centigrade16_t" ||
+				col[j].type == "centigradeRaw_t" ||
 				col[j].type == "centigrade8_t"))
 			{
 				val = centigradeToFarenheit(val);
@@ -602,20 +602,6 @@ function onDegreesChanged()
 // data handling
 //----------------------------------
 
-function decodeFloat16(u16)
-{
-    let s = (u16 & 0x8000) >> 15;
-    let e = (u16 & 0x7C00) >> 10;
-    let f = u16 & 0x03FF;
-
-    if (e === 0) {
-        return (s ? -1 : 1) * Math.pow(2, -14) * (f / Math.pow(2, 10));
-    } else if (e === 31) {
-        return f ? NaN : ((s ? -1 : 1) * Infinity);
-    } else {
-        return (s ? -1 : 1) * Math.pow(2, e - 15) * (1 + f / Math.pow(2, 10));
-    }
-}
 
 function getTypedValue(view, offset, typ)
 {
@@ -649,8 +635,9 @@ function getTypedValue(view, offset, typ)
     } else if (typ === 'int8_t') {
         value = view.getInt8(offset);
         size = 1;
-    } else if (typ === 'float16_t' || typ === 'centigrade16_t') {
-        value = decodeFloat16(view.getUint16(offset, true));
+    } else if (typ === 'centigradeRaw_t') {
+        value = view.getInt16(offset, true);
+		value *= 0.0078125;		// C/128
         size = 2;
     }
 
