@@ -272,9 +272,13 @@ function getSeriesData()
 		{
 			let val = rec[j+1];
 
-			if (is_faren && col[j].type == "temperature_t")
+			if (is_faren && (
+				col[j].type == "centigrade32_t" ||
+				col[j].type == "centigrade16_t" ||
+				col[j].type == "centigrade8_t"))
+			{
 				val = centigradeToFarenheit(val);
-
+			}
 			if (col[j].min == null)
 			{
 				col[j].min = val;
@@ -598,18 +602,62 @@ function onDegreesChanged()
 // data handling
 //----------------------------------
 
-function getTypedValue(view,offset,typ)
+function decodeFloat16(u16)
 {
-	let val;
-	if (typ == 'float')
-		val = view.getFloat32(offset, true);
-	else if (typ == 'temperature_t')
-		val = view.getFloat32(offset, true);
-	else if (typ == 'int32_t')
-		val = view.getInt32(offset, true);
-	else
-		val = view.getUint32(offset, true);
-	return val;
+    let s = (u16 & 0x8000) >> 15;
+    let e = (u16 & 0x7C00) >> 10;
+    let f = u16 & 0x03FF;
+
+    if (e === 0) {
+        return (s ? -1 : 1) * Math.pow(2, -14) * (f / Math.pow(2, 10));
+    } else if (e === 31) {
+        return f ? NaN : ((s ? -1 : 1) * Infinity);
+    } else {
+        return (s ? -1 : 1) * Math.pow(2, e - 15) * (1 + f / Math.pow(2, 10));
+    }
+}
+
+function getTypedValue(view, offset, typ)
+{
+    let value;
+    let size = 0;
+
+    if (typ === 'float32_t' || typ === 'centigrade32_t') {
+        value = view.getFloat32(offset, true);
+        size = 4;
+    } else if (typ === 'int32_t') {
+        value = view.getInt32(offset, true);
+        size = 4;
+    } else if (typ === 'uint32_t') {
+        value = view.getUint32(offset, true);
+        size = 4;
+    } else if (typ === 'uint16_t') {
+        value = view.getUint16(offset, true);
+        size = 2;
+    } else if (typ === 'int16_t') {
+        value = view.getInt16(offset, true);
+        size = 2;
+    } else if (typ === 'uint8_t') {
+        value = view.getUint8(offset);
+        size = 1;
+    } else if (typ === 'uint8x10_t') {
+        value = view.getUint8(offset) * 10;
+        size = 1;
+    } else if (typ === 'centigrade8_t') {
+        value = view.getUint8(offset) - 40;
+        size = 1;
+    } else if (typ === 'int8_t') {
+        value = view.getInt8(offset);
+        size = 1;
+    } else if (typ === 'float16_t' || typ === 'centigrade16_t') {
+        value = decodeFloat16(view.getUint16(offset, true));
+        size = 2;
+    }
+
+	let retval = {};
+	retval.value = value;
+	retval.size = size;
+	return retval;
 }
 
 
@@ -624,9 +672,8 @@ function dataToRecs(abuffer)
 	{
 		console.log("dataToRecs() received " + bytes + " bytes");
 		var header = chart.header;
-		var rec_size = 4*(header.num_cols+1);
-		let num_recs = bytes / rec_size;
-		if (bytes % rec_size)
+		let num_recs = bytes / header.rec_size;
+		if (bytes % header.rec_size)
 		{
 			console.log("WARNING: NON-INTEGRAL NUMBER OF CHART DATA RECORDS");
 			return;
@@ -640,8 +687,9 @@ function dataToRecs(abuffer)
 			offset += 4;
 			for (var j=0; j<header.num_cols; j++)
 			{
-				rec.push(getTypedValue(view,offset,col[j].type));
-				offset += 4;
+				let obj = getTypedValue(view,offset,col[j].type);
+				rec.push(obj.value);
+				offset += obj.size;
 			}
 			recs.push(rec);
 			if (rec[0] > max_dt) max_dt = rec[0];
