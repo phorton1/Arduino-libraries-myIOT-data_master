@@ -10,12 +10,7 @@ projects. It is included twice in the main myIOT library repository, once
 as an outer level **/data** folder, and again in the *examples/testDevice/data*
 folder.
 
-It is included, as a submodule, in any myIOT projects that I publish
-on github, which currently includes:
-
-- [bilgeAlarm](https://github.com/phorton1/Arduino-bilgeAlarm),
-- [theClock](https://github.com/phorton1/Arduino-theClock), and
-- [theClock3](https://github.com/phorton1/Arduino-theClock3).
+It is included, as a submodule, in any myIOT projects that I publish on github.
 
 On my machine, the **data_master** repo lives within the Arduino/libraries/myIOT
 folder, and is ignored in the **.gitignore** file. You are probably reading this
@@ -35,9 +30,9 @@ If you create your own myIOT project, you can choose to merely *copy*
 the **data** folder from the myIOT library to your project, or you may choose
 to include it as a *submodule* which references my data_master repo.
 It is beyond the scope of this short readme to explain git submodules,
-but here is how I added it to the Arduino-theClock project:
+but here is how to add it to the Arduino-YourProject project:
 
-	cd /src/Arduino/theClock
+	cd /src/Arduino/YourProject
 	git submodule add https://github.com/phorton1/Arduino-libraries-myIOT-data_master data
 
 
