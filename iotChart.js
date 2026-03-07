@@ -151,6 +151,10 @@ function onLegendClick(ev)
 
     // capture zoom + visibility 
     captureZoomAndVisibility(chart.zoom_window);
+
+	// put into local storage
+	putStorage(data_name + ".series_visible", JSON.stringify(chart.series_visible));
+	putStorage(data_name + ".series_zorder", JSON.stringify(chart.series_zorder));
 }
 
 
@@ -548,7 +552,7 @@ function onPeriodChanged()
 {
     console.log('onPeriodChanged()');
 
-	putStorage('chart_period',getChartSecs());
+	putStorage(data_name + '.chart_period',getChartSecs());
 	
 	stopTimer();
 	get_chart_data();
@@ -789,10 +793,19 @@ function get_chart_header()
 				}
 			}
 
-			let use_period = getStorage("chart_period");
+			let use_period = getStorage(data_name + ".chart_period");
 			if (!use_period)
 				use_period = header.default_period;
 			document.getElementById('_chart_period').value = use_period;
+
+			let vis = getStorage(data_name + ".series_visible");
+			if (vis)
+				chart.series_visible = JSON.parse(vis);
+
+			let z = getStorage(data_name + ".series_zorder");
+			if (z)
+				chart.series_zorder = JSON.parse(z);
+
 			get_chart_data();
 		}
     }
