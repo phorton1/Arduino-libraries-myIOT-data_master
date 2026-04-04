@@ -433,11 +433,13 @@ function create_chart()
         cursor : {
             zoom:true,
             looseZoom: true,
-            showTooltip:true,
-            followMouse: true,
-            showTooltipOutsideZoom: true,
+            showTooltip:false,
+            followMouse: false,
+            showTooltipOutsideZoom: false,
             constrainOutsideZoom: false
         },
+
+        highlighter: { show: false },
 
     };  // options
 
@@ -493,6 +495,38 @@ function create_chart()
             delete chart.zoom_window;
             create_chart();
         });
+
+	// custom tooltip and context menu handlers
+
+	$('#_chart')
+		.off('mousemove.iot')
+		.on('mousemove.iot', function(ev)
+		{
+			if (!chart.plot) return;
+			var rect    = document.getElementById('_chart').getBoundingClientRect();
+			var gp      = chart.plot._gridPadding;
+			var chartPx = ev.clientX - rect.left;
+			var chartPy = ev.clientY - rect.top;
+			var gpx     = chartPx - gp.left;
+			var gw      = chart.plot._width - gp.left - gp.right;
+			if (gpx < 0 || gpx > gw) { hideTooltip(); return; }
+			onChartMouseMove(ev, chart.plot.axes.xaxis.p2u(chartPx), chartPx, chartPy);
+		});
+
+	$('#_chart')
+		.off('mouseleave.iot')
+		.on('mouseleave.iot', function()
+		{
+			hideTooltip();
+		});
+
+	$('#_chart')
+		.off('contextmenu.iot')
+		.on('contextmenu.iot', function(ev)
+		{
+			ev.preventDefault();
+			showContextMenu(ev);
+		});
 
     // set refresh timer and enable controls
 
@@ -673,9 +707,18 @@ function dataToRecs(abuffer)
 		var col = header.col;
 		for (var i=0; i<num_recs; i++)
 		{
-			var rec = [];
-			rec.push(view.getUint32(offset, true));
+			let rec_start = offset;
+			let dt = view.getUint32(offset, true);
 			offset += 4;
+
+			if (dt === 0)	// tombstoned record — skip entirely
+			{
+				offset = rec_start + header.rec_size;
+				continue;
+			}
+
+			var rec = [];
+			rec.push(dt);
 			for (var j=0; j<header.num_cols; j++)
 			{
 				let obj = getTypedValue(view,offset,col[j].type);
@@ -700,6 +743,7 @@ function create_chart_data(abuffer)
 {
 	let recs = dataToRecs(abuffer);
 	if (!recs) return;
+	recs.sort(function(a,b){ return a[0]-b[0]; });
 	chart.recs = recs;
 	create_chart();
 }
@@ -716,6 +760,7 @@ function update_chart_data(abuffer)
 		{
 			old_recs.push(recs[i]);
 		}
+		old_recs.sort(function(a,b){ return a[0]-b[0]; });
 		console.log("update_chart_data() num new recs= " + chart.recs.length);
 		create_chart();
 	}
@@ -824,6 +869,7 @@ function beginChart()
 	$.jqplot.config.enablePlugins = true;
 	disableControls(true);
 	setChartElementSize();
+	injectStyles();
 
     // attach a handler which subsequently attachs handlers to
 	// legend swatches each time the plot is drawn
@@ -845,7 +891,4 @@ function beginChart()
 
 	get_chart_header();
 }
-
-
-
 
