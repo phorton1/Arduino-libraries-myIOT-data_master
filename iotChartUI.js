@@ -244,11 +244,13 @@ function showContextMenu(ev)
 	let captured_rec    = chart.tooltip_rec || null;
 
 	let items = [];
+	var has_file = chart.header && chart.header.has_file;
 	if (captured_vertex)
-		items.push({ label: 'View / Delete Record', fn: function(){ showRecordDialog(captured_vertex); } });
-	if (captured_rec)
+		items.push({ label: has_file ? 'View / Delete Record' : 'View Record', fn: function(){ showRecordDialog(captured_vertex); } });
+	if (has_file && captured_rec)
 		items.push({ label: 'Trim Before This Time', fn: function(){ doTrimBefore(captured_rec); } });
-	items.push({ label: 'Scan Datalog', fn: doScanDatalog });
+	if (has_file)
+		items.push({ label: 'Scan Datalog', fn: doScanDatalog });
 
 	let html = '';
 	for (let i = 0; i < items.length; i++)
@@ -317,7 +319,8 @@ function showRecordDialog(rec)
 	}
 	html += '</table>';
 	html += '<div class="dlg_buttons">';
-	html += '<button onclick="doDeleteRecord(_dlg_rec)">Delete</button> ';
+	if (header.has_file)
+		html += '<button onclick="doDeleteRecord(_dlg_rec)">Delete</button> ';
 	html += '<button onclick="closeRecordDialog()">Close</button>';
 	html += '</div></div>';
 
