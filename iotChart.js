@@ -677,6 +677,10 @@ function getTypedValue(view, offset, typ)
         value = view.getInt16(offset, true);
 		value *= 0.0078125;		// C/128
         size = 2;
+    } else if (typ === 'int16div10_t') {
+        value = view.getInt16(offset, true);
+		value /= 10;
+        size = 2;
     }
 
 	let retval = {};
