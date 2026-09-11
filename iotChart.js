@@ -11,6 +11,8 @@ var defaultSeriesColors = [
 
 function centigradeToFarenheit(centigrade)
 {
+	if (centigrade === null)	// sensor error sentinel
+		return null;
 	var farenheit = (centigrade*9)/5 + 32;
 	return parseFloat(farenheit.toFixed(3));
 }
@@ -283,7 +285,11 @@ function getSeriesData()
 			{
 				val = centigradeToFarenheit(val);
 			}
-			if (col[j].min == null)
+			if (val === null)
+			{
+				// null (sensor error) plots as a gap; excluded from min/max
+			}
+			else if (col[j].min == null)
 			{
 				col[j].min = val;
 				col[j].max = val;
@@ -338,7 +344,11 @@ function getSeriesData()
 				{
 					filtered_data[j].push([x, y]);
 
-					if (filtered_min[j] == null)
+					if (y === null)
+					{
+						// null (sensor error) excluded from min/max
+					}
+					else if (filtered_min[j] == null)
 					{
 						filtered_min[j] = y;
 						filtered_max[j] = y;
@@ -675,7 +685,10 @@ function getTypedValue(view, offset, typ)
         size = 1;
     } else if (typ === 'centigradeRaw_t') {
         value = view.getInt16(offset, true);
-		value *= 0.0078125;		// C/128
+		if (value == 32767)		// TEMP_RAW_ERROR sentinel from myIOTTempSensor
+			value = null;
+		else
+			value *= 0.0078125;	// C/128
         size = 2;
     } else if (typ === 'int16div10_t') {
         value = view.getInt16(offset, true);

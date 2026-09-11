@@ -110,6 +110,7 @@ function onChartMouseMove(ev, x_ms, chartPx, chartPy)
 			{
 				val = centigradeToFarenheit(val);
 			}
+			if (val === null) continue;		// sensor error sentinel; not plotted
 			let rec_py = yaxis.u2p(val);
 			let dx = chartPx - rec_px;
 			let dy = chartPy - rec_py;
@@ -182,7 +183,7 @@ function showTooltip(ev, rec)
 		{
 			val = centigradeToFarenheit(val);
 		}
-		let val_str = (typeof val === 'number') ? val.toFixed(2) : val;
+		let val_str = (val === null) ? '---' : (typeof val === 'number') ? val.toFixed(2) : val;
 		html += '<div class="tt_row">' +
 			'<span class="tt_label">' + col[j].name + '</span>' +
 			'<span class="tt_value">' + val_str + '</span></div>';
@@ -313,7 +314,7 @@ function showRecordDialog(rec)
 		{
 			val = centigradeToFarenheit(val);
 		}
-		let val_str = (typeof val === 'number') ? val.toFixed(3) : val;
+		let val_str = (val === null) ? '---' : (typeof val === 'number') ? val.toFixed(3) : val;
 		html += '<tr><td class="dlg_label">' + col[j].name + '</td>' +
 				'<td class="dlg_value">' + val_str + '</td></tr>';
 	}
