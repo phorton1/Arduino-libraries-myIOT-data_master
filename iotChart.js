@@ -678,7 +678,11 @@ function getTypedValue(view, offset, typ)
         value = view.getUint8(offset) * 10;
         size = 1;
     } else if (typ === 'centigrade8_t') {
-        value = view.getUint8(offset) - 40;
+        value = view.getUint8(offset);
+		if (value == 0)			// byte 0 (-40C) is "no reading"; never a real temperature
+			value = null;
+		else
+			value -= 40;
         size = 1;
     } else if (typ === 'int8_t') {
         value = view.getInt8(offset);
